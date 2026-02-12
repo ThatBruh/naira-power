@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { User, Family } from '../types';
 import { Users, Home, ArrowRight, UserPlus } from 'lucide-react';
-import * as storageService from '../services/storageService';
+import { useFirebaseFamily } from '../hooks/useFirebaseFamily';
 
 interface OnboardingProps {
   user: User;
@@ -9,28 +9,56 @@ interface OnboardingProps {
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
+  const { createFamily, joinFamily, loading, error: firebaseError } = useFirebaseFamily();
+
   const [view, setView] = useState<'selection' | 'create' | 'join'>('selection');
   const [familyName, setFamilyName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!familyName.trim()) return;
-    
-    const family = storageService.createFamily(familyName, user);
-    onComplete({ ...user, familyId: family.id }, family);
+
+    const code = await createFamily(familyName, user.id);
+
+    if (code) {
+      const updatedUser = { ...user, familyId: code };
+
+      const family: Family = {
+        id: code,
+        name: familyName,
+        inviteCode: code,
+        creatorId: user.id,
+        memberIds: [user.id],
+        createdAt: Date.now(),
+      };
+
+      onComplete(updatedUser, family);
+    }
   };
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteCode.trim()) return;
-    
-    const family = storageService.joinFamily(inviteCode, user);
-    if (family) {
-      onComplete({ ...user, familyId: family.id }, family);
+
+    const familyData = await joinFamily(inviteCode, user.name, user.id);
+
+    if (familyData) {
+      const updatedUser = { ...user, familyId: inviteCode };
+
+      const family: Family = {
+        id: familyData.familyCode,
+        name: familyData.familyCode,
+        inviteCode: familyData.familyCode,
+        creatorId: familyData.adminId,
+        memberIds: familyData.members.map((m) => m.id),
+        createdAt: new Date(familyData.createdAt).getTime(),
+      };
+
+      onComplete(updatedUser, family);
     } else {
-      setError('Invalid invite code. Please ask the family admin for the correct code.');
+      setError(firebaseError || 'Invalid invite code. Please ask the family admin for the correct code.');
     }
   };
 
@@ -45,7 +73,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button 
+              <button
                 onClick={() => setView('create')}
                 className="bg-white p-6 rounded-2xl shadow-sm border-2 border-transparent hover:border-blue-500 hover:shadow-md transition-all text-left group"
               >
@@ -56,7 +84,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                 <p className="text-sm text-gray-500">I am the first one here. I'll set up the account.</p>
               </button>
 
-              <button 
+              <button
                 onClick={() => setView('join')}
                 className="bg-white p-6 rounded-2xl shadow-sm border-2 border-transparent hover:border-purple-500 hover:shadow-md transition-all text-left group"
               >
@@ -83,21 +111,25 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-900 placeholder-gray-400"
                   value={familyName}
                   onChange={(e) => setFamilyName(e.target.value)}
+                  disabled={loading}
                 />
               </div>
+              {loading && <p className="text-blue-600 text-sm">Processing...</p>}
+              {firebaseError && <p className="text-red-600 text-sm">{firebaseError}</p>}
               <div className="flex gap-3 pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setView('selection')}
                   className="px-6 py-3 text-gray-600 font-medium hover:bg-gray-50 rounded-xl transition-colors"
                 >
                   Back
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-blue-400 disabled:cursor-not-allowed"
                 >
-                  Create Profile <ArrowRight size={18} />
+                  {loading ? 'Creating...' : 'Create Profile'} {!loading && <ArrowRight size={18} />}
                 </button>
               </div>
             </form>
@@ -117,26 +149,29 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none uppercase tracking-widest font-mono bg-white text-gray-900 placeholder-gray-400"
                   value={inviteCode}
                   onChange={(e) => {
-                      setInviteCode(e.target.value.toUpperCase());
-                      setError('');
+                    setInviteCode(e.target.value.toUpperCase());
+                    setError('');
                   }}
+                  disabled={loading}
                   maxLength={6}
                 />
-                {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                {(error || firebaseError) && <p className="text-red-500 text-sm mt-2">{error || firebaseError}</p>}
               </div>
+              {loading && <p className="text-blue-600 text-sm">Processing...</p>}
               <div className="flex gap-3 pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setView('selection')}
                   className="px-6 py-3 text-gray-600 font-medium hover:bg-gray-50 rounded-xl transition-colors"
                 >
                   Back
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="flex-1 bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="flex-1 bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 disabled:bg-purple-400 disabled:cursor-not-allowed"
                 >
-                  Join Family <UserPlus size={18} />
+                  {loading ? 'Joining...' : 'Join Family'} {!loading && <UserPlus size={18} />}
                 </button>
               </div>
             </form>
