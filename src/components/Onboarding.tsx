@@ -141,7 +141,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Enter Invite Code</h2>
             <form onSubmit={handleJoin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">6-Digit Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Family Code</label>
                 <input
                   type="text"
                   required
@@ -153,7 +153,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                     setError('');
                   }}
                   disabled={loading}
-                  maxLength={6}
                 />
                 {(error || firebaseError) && <p className="text-red-500 text-sm mt-2">{error || firebaseError}</p>}
               </div>
